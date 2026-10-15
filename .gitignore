@@ -1,0 +1,39 @@
+# OS / editors
+.DS_Store
+._*
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Local secrets / credentials (examples may be tracked)
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+auth.json
+
+# Local experiments / logs / generated output
+.tmp/
+tmp/
+.cache/
+__pycache__/
+*.py[cod]
+.venv/
+node_modules/
+coverage/
+.coverage
+coverage.out
+*.log
+/dist/
+/build/
+
+# Local agent/session state; shared instructions and tests remain trackable
+.codex/
