@@ -4,6 +4,126 @@
 
 PTDD 保留规范驱动开发（SDD）的契约先行思路与 RED → GREEN → REFACTOR 流程，按需读取规则，不要求先建立一整套初始化档案。它是一套供 Codex 执行的工作指引，不是编译器、测试框架或自动验收系统。
 
+## 成果展示
+
+**案例：用 TDD 为 Python 分页参数补齐类型、边界与上限行为。**
+
+合成项目最初只有 `normalize_limit(value): return value` 和一项正常输入测试。需求是拒绝布尔值、非整数及非正数，并把大于 100 的值截断为 100。
+
+2026-10-15 在 macOS、Codex CLI 0.162.1、`gpt-6.1-sol`、Python 3.14.7、coverage 7.16.2 上，从本仓库下载并隔离安装后完成阶段 0–4。生成了行为契约、TDD 计划、正式测试和最小实现；纯库函数的阶段 5 标为不适用。此次案例只证明该 Python 路径，不扩展为其他语言均已实测。
+
+### 实际交付与验证
+
+- 基线：1 项已有测试通过。
+- RED：7 项测试被发现，16 个子场景因未抛异常或未截断而失败，退出码 1。
+- GREEN：实现后同一组 7 项测试通过，退出码 0。
+- REFACTOR 检查：当前最小实现无需额外重构，覆盖率运行复跑全部测试仍通过。
+
+下面是实际覆盖率输出摘录，统计全部 `pagination.py`，未增加排除项：
+
+```text
+Name            Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------
+pagination.py       8      0      6      0   100%
+-----------------------------------------------------------
+TOTAL               8      0      6      0   100%
+```
+
+实际生成的最小实现：
+
+```python
+def normalize_limit(value):
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError('limit must be an integer')
+    if value <= 0:
+        raise ValueError('limit must be positive')
+    if value > 100:
+        return 100
+    return value
+```
+
+未验证：独立类型检查、构建和 lint（合成项目未配置）。没有安装无关依赖、提交或推送代码；这不是通用可靠性或性能基准。
+
+<details>
+<summary>查看实际生成的行为契约</summary>
+
+# normalize_limit 行为契约
+
+创建日期：2026-10-15。来源：用户明确需求及 pagination.py。
+关联计划：agent_docs/plans/2026-10-15-normalize-limit-plan.md。
+
+## 输入输出与错误
+
+函数 normalize_limit(value) 先检查类型，接受 int（含子类），明确拒绝 bool。
+非 int 或 bool 抛 TypeError；合法整数小于等于 0 抛 ValueError。
+1–100 原样返回，大于 100 返回整数 100。无副作用，不做类型转换。
+异常消息不属于本次契约。
+
+## 场景与断言
+
+| 场景 | 输入 | 预期及断言 |
+| --- | --- | --- |
+| 正常及边界 | 1、20、99、100 | 返回原值，类型为 int |
+| 截断 | 101、10**100 | 返回整数 100 |
+| 非正数 | -10、-1、0 | 抛 ValueError |
+| 布尔值 | True、False | 抛 TypeError，优先于数值检查 |
+| 非整数 | None、字符串、浮点数、列表、字典、对象 | 抛 TypeError |
+| 整数子类 | int 子类的正整数 | 原样返回 |
+
+## 接口测试包适用性
+
+本次无外部 API 变更。纯库函数不涉及 HTTP，阶段 5 和 Apifox 不适用。
+
+</details>
+
+<details>
+<summary>准备合成项目并复制请求，复现完整流程</summary>
+
+先按下方说明安装 `$ptdd`，并确认 Python 3.10+ 与已登录的 Codex 可用。在一个可写目录运行以下 shell 命令（新建 `ptdd-demo`，同名目录已存在时请另选位置；coverage 安装需要网络）：
+
+```sh
+(
+  set -eu
+mkdir ptdd-demo
+cd ptdd-demo
+python3 -m venv .venv
+. .venv/bin/activate
+python3 -m pip install 'coverage==7.16.2'
+cat > pagination.py <<'PYCODE'
+def normalize_limit(value):
+    return value
+PYCODE
+mkdir tests
+cat > tests/test_pagination.py <<'PYCODE'
+import unittest
+from pagination import normalize_limit
+
+class ExistingBehavior(unittest.TestCase):
+    def test_valid_limit(self):
+        self.assertEqual(normalize_limit(20), 20)
+PYCODE
+cat > README.md <<'DOC'
+合成 Python 分页库，无 HTTP、数据库或网络依赖。
+测试：python3 -m unittest discover -s tests -v
+覆盖率：python3 -m coverage run --branch --source=pagination -m unittest discover -s tests -v
+报告：python3 -m coverage report -m --fail-under=80
+生产代码统计范围：pagination.py，不排除任何生产行；行覆盖率至少 80%，同时报告分支覆盖。
+不提交 Git。
+DOC
+)
+```
+
+然后运行 `codex -C ptdd-demo`，或用桌面端打开 `ptdd-demo`，复制以下对话请求：
+
+```text
+$ptdd 为当前合成 Python 项目增强 normalize_limit(value)。请按六阶段思路完成阶段 0–4，阶段 5 因非 HTTP 不适用。契约已明确：只接受 int 且拒绝 bool，非 int 抛 TypeError；小于等于 0 抛 ValueError；1–100 原样返回，大于 100 截断为 100。
+本次明确授权保存本地契约和计划并开始实施，范围限定 pagination.py、tests/test_pagination.py 及 agent_docs 中对应文档；不需要逐阶段重复确认。保留现有技术栈，先测试确认有效 RED，再最小实现 GREEN，必要重构并复跑。使用项目 README 的 unittest 和覆盖率入口；不要安装其他依赖，不提交或推送 Git。结束时列实际证据、已通过和未验证项。
+```
+
+预期会修改这个练习项目的生产文件、正式测试和 `agent_docs` 文档；不触碰真实业务项目，不上传。测试数量、措辞可以变化，但须有有效 RED、对应 GREEN、契约边界和真实覆盖率证据。查看结果后，可自行删除整个练习目录；不要把删除命令用于其他项目。
+
+</details>
+
 ## 适用人群与场景
 
 - **PM / 技术产品经理**：把模糊需求梳理为目标、边界、可观察行为与验收条件，和开发共同确认契约及计划。
